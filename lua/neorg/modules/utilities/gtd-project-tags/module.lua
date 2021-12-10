@@ -27,7 +27,7 @@ module.load = function()
     data = { gtd_project_tags = { args = 0, name = "utilities.gtd_project_tags.views" } }
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
-  module.required["core.autocommands"].enable_autocommand("WinClosed")
+  module.required["core.autocommands"].enable_autocommand("BufLeave")
 end
 
 module.public = {
@@ -338,7 +338,6 @@ module.private = {
         end
       end
     end
-    put(project_lines)
   end,
 
   get_completed_counts = function(projects)
@@ -441,7 +440,7 @@ module.events.subscribed = {
     ["core.gtd.ui.goto_task"] = true,
     ["utilities.gtd_project_tags.views"] = true,
   },
-  ["core.autocommands"] = { winclosed = true, },
+  ["core.autocommands"] = { bufleave = true, },
 }
 
 module.on_event = function(event)
@@ -456,7 +455,7 @@ module.on_event = function(event)
       module.private.goto_task()
     end
   elseif event.split_type[1] == "core.autocommands" then
-      if event.split_type[2] == "winclosed" then
+      if event.split_type[2] == "bufleave" then
         module.private.reset()
       end
   end
