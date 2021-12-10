@@ -53,7 +53,7 @@ module.public = {
     projects = {}
     for _, task in pairs(tasks) do
       task.project_node =
-      module.public.insert(projects, (task.project_node or {'_'})[1], task)
+      module.required["core.gtd.queries"].insert(projects, (task.project_node or {'_'})[1], task)
     end
     return projects
   end,
@@ -86,18 +86,6 @@ module.public = {
       end
     end
     return subprojects
-  end,
-
-  insert = function(tbl, key, value)
-    -- copied from
-    -- gtd/queries/retrievers.lua
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-    if not tbl[key] then
-      tbl[key] = {}
-    end
-    table.insert(tbl[key], value)
   end,
 
   display_projects = function(projects)
