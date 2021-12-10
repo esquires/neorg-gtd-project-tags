@@ -79,10 +79,10 @@ which will render like this
     - develop a target market
 ```
 
-For large projects this project also supports folding by default.
-One pending feature is the ability to jump to tasks as users move through the tasks list.
-This is pending a feature request to neorg. Once that is fixed, branch the `cursor-moved`
-will be merged.
+For large projects this project also supports folding by default. One pending
+feature is the ability to jump to tasks as users move through the tasks list.
+This is pending a [feature](https://github.com/nvim-neorg/neorg/issues/228)
+request to neorg. Once that is fixed, branch the `cursor-moved` will be merged.
 
 # Installation
 

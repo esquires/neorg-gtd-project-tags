@@ -2,7 +2,6 @@ require("neorg.modules.base")
 require('neorg.events')
 
 local module = neorg.modules.create("utilities.gtd_project_tags")
-local log = require('neorg.external.log')
 
 module.setup = function()
   return {
@@ -10,6 +9,7 @@ module.setup = function()
     requires = {
       "core.autocommands",
       "core.gtd.ui",
+      "core.gtd.ui.displayers",
       "core.gtd.queries",
       "core.integrations.treesitter",
       "core.keybinds",
@@ -33,126 +33,17 @@ end
 module.public = {
   version = '0.1',
 
-  get_tag = function(tag_name, node, type, opts)
-    -- This function is largely copied from
-    -- core/gtd/queries/retrievers.lua
-    -- but adds "project" to the validation call
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-
-    vim.validate({
-      tag_name = {
-        tag_name,
-        function(t)
-          return vim.tbl_contains({ "time.due", "time.start", "contexts", "waiting.for", "project" }, t)
-        end,
-        "time.due|time.start|contexts|waiting.for|project",
-      },
-      node = { node, "table" },
-      type = {
-        type,
-        function(t)
-          return vim.tbl_contains({ "project", "task" }, t)
-        end,
-        "task|project",
-      },
-      opts = { opts, "table", true },
-    })
-
-    opts = opts or {}
-
-    -- Will fetch multiple parent tag sets if we did not explicitly add same_node.
-    -- Else, it'll only get the first upper tag_set from the current node
-    local fetch_multiple_sets = not opts.same_node
-
-    local tags_node = module.required["core.queries.native"].find_parent_node(
-      { node.node, node.bufnr },
-      "carryover_tag_set",
-      { multiple = fetch_multiple_sets }
-    )
-
-    if #tags_node == 0 then
-      return nil
-    end
-
-    local tree = {
-      {
-        query = { "all", "carryover_tag" },
-        where = { "child_content", "tag_name", tag_name },
-        subtree = {
-          {
-            query = { "all", "tag_parameters" },
-            subtree = {
-              { query = { "all", "word" } },
-            },
-          },
-        },
-      },
-    }
-
-    local extract = function(_node, extracted)
-      local tag_content_nodes = module.required["core.queries.native"].query_from_tree(_node[1], tree, _node[2])
-
-      if #tag_content_nodes == 0 then
-        return nil
-      end
-
-      if not opts.extract then
-        -- Only keep the nodes and add them to the results
-        tag_content_nodes = vim.tbl_map(function(node)
-            return node[1]
-        end, tag_content_nodes)
-        vim.list_extend(extracted, tag_content_nodes)
-      else
-        local res = module.required["core.queries.native"].extract_nodes(tag_content_nodes)
-
-        for _, res_tag in pairs(res) do
-          if not vim.tbl_contains(extracted, res_tag) then
-            table.insert(extracted, res_tag)
-          end
-        end
-      end
-    end
-
-    local extracted = {}
-
-    if not fetch_multiple_sets then
-      -- If i don't fetch multiple sets, i only have one, so i cannot iterate
-      extract(tags_node, extracted)
-    else
-      for _, _node in pairs(tags_node) do
-        extract(_node, extracted)
-      end
-    end
-
-    if #extracted == 0 then
-      return nil
-    end
-
-    return extracted
-  end,
-
   get_tasks = function()
-    -- This function is taken from
-    -- core/gtd/ui/selection_popups.lua:show_views_popup
-    -- with the following changes
-    -- 1. removes the get("projects") and display of projects.
-    -- 2. adds a call to get_tag to add the project to the metadata
-    -- 3. does not call displays
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-
     local configs = neorg.modules.get_module_config("core.gtd.base")
     local exclude_files = configs.exclude
     table.insert(exclude_files, configs.default_lists.inbox)
 
-    -- Get tasks and projects
     local tasks = module.required["core.gtd.queries"].get("tasks", { exclude_files = exclude_files })
-
     local tasks = module.required["core.gtd.queries"].add_metadata(tasks, "task")
+
     for _, task in pairs(tasks) do
-      task["project_node"] = module.public.get_tag("project", task, "task", {extract = true})
+      task["project_node"] = module.required["core.gtd.queries"].get_tag(
+        "project", task, "task", {extract = true}, {"project"})
     end
 
     return tasks
@@ -162,7 +53,7 @@ module.public = {
     projects = {}
     for _, task in pairs(tasks) do
       task.project_node =
-      module.public.insert(projects, (task.project_node or {'_'})[1], task)
+      module.required["core.gtd.queries"].insert(projects, (task.project_node or {'_'})[1], task)
     end
     return projects
   end,
@@ -195,18 +86,6 @@ module.public = {
       end
     end
     return subprojects
-  end,
-
-  insert = function(tbl, key, value)
-    -- copied from
-    -- gtd/queries/retrievers.lua
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-    if not tbl[key] then
-      tbl[key] = {}
-    end
-    table.insert(tbl[key], value)
   end,
 
   display_projects = function(projects)
@@ -263,18 +142,6 @@ module.public = {
   get_project_level = function(project_name)
     return #vim.split(project_name, '/')
   end,
-
-  percent_completed = function(num_completed, num_tasks)
-    -- copied from 
-    -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-    if num_tasks == 0 then
-      return 0
-    end
-    return math.floor(num_completed * 100 / num_tasks)
-  end,
 }
 
 module.config.public = {
@@ -285,18 +152,12 @@ module.private = {
   bufnr = nil,
 
   add_unknown_projects = function(projects, buf_lines, line_to_task_data, project_lines)
-    -- adapted from 
-    -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
     local unknown_project = projects["_"]
     if unknown_project and #unknown_project > 0 then
       local undone = vim.tbl_filter(function(a, _)
         return a.state ~= "done"
       end, unknown_project)
       table.insert(buf_lines, "- /" .. #undone .. " tasks don't have a project assigned/")
-
 
       if #undone > 0 then
         table.insert(buf_lines, "")
@@ -312,8 +173,6 @@ module.private = {
   end,
 
   add_known_projects = function(projects, completed_counts, buf_lines, line_to_task_data, project_lines)
-    -- adapted from 
-    -- core/gtd/ui/displayers.lua:display_projects
     local added_projects = {}
 
     local project_names = vim.tbl_keys(projects)
@@ -367,9 +226,6 @@ module.private = {
   write_project = function(project_name, tasks, summary, buf_lines, line_to_task_data)
     -- adapted from 
     -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
     local num_indent = module.public.get_project_level(project_name)
     local whitespace = string.rep(" ", num_indent - 1)
 
@@ -378,13 +234,10 @@ module.private = {
       " (" .. summary.num_completed .. "/" .. summary.num_tasks .. " done)"
     table.insert(buf_lines, header)
 
-    local pct = module.public.percent_completed(summary.num_completed, summary.num_tasks)
-    local completed_over_10 = math.floor(pct / 10)
-    local percent_completed_visual = "["
-      .. string.rep("=", completed_over_10)
-      .. string.rep(" ", 10 - completed_over_10)
-      .. "]"
-    table.insert(buf_lines, whitespace .. "   " .. percent_completed_visual .. " " .. pct .. "% done")
+    local pct = module.required["core.gtd.ui.displayers"].percent(
+      summary.num_completed, summary.num_tasks)
+    local pct_str = module.required["core.gtd.ui.displayers"].percent_string(pct)
+    table.insert(buf_lines, whitespace .. "   " .. pct_str .. " " .. pct .. "% done")
     table.insert(buf_lines, "")
 
     for _, task in pairs(tasks) do
@@ -399,8 +252,10 @@ module.private = {
   end,
 
   reset = function()
-    module.required["core.mode"].set_mode(
-      module.required["core.mode"].get_previous_mode())
+    if module.required['core.mode'].get_mode() == 'gtd-displays' then
+      module.required["core.mode"].set_mode(
+        module.required["core.mode"].get_previous_mode())
+    end
 
     module.private.line_to_task_data = {}
     module.private.bufnr = {}
