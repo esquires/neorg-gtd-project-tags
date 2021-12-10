@@ -28,6 +28,7 @@ module.load = function()
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
   module.required["core.autocommands"].enable_autocommand("WinClosed")
+  module.required["core.autocommands"].enable_autocommand("CursorMoved")
 end
 
 module.public = {
@@ -231,8 +232,27 @@ module.public = {
     module.private.line_to_task_data = line_to_task_data
   end,
 
+  create_norg_buffer = function(name)
+    -- in core/ui/module.lua
+    -- there is a autocommand that closes the window whenever it has been left
+    -- so this just pulls out the necessaries
+
+    local buf = (function()
+        name = "buffer/" .. name .. ".norg"
+        return module.required["core.ui"].create_vsplit(name, {}, true)
+    end)()
+
+    vim.api.nvim_win_set_buf(0, buf)
+    vim.cmd(([[
+        edit
+        autocmd BufDelete <buffer=%s> silent! bd! %s
+    ]]):format(buf, buf))
+
+    return buf
+  end,
+
   generate_display = function(name, buf_lines, project_lines)
-    local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, false)
+    local bufnr = module.public.create_norg_buffer(name)
     module.private.bufnr = bufnr
     module.required["core.mode"].set_mode("gtd-displays")
 
@@ -441,7 +461,10 @@ module.events.subscribed = {
     ["core.gtd.ui.goto_task"] = true,
     ["utilities.gtd_project_tags.views"] = true,
   },
-  ["core.autocommands"] = { winclosed = true, },
+  ["core.autocommands"] = {
+    winclosed = true,
+    cursormoved = true,
+  },
 }
 
 module.on_event = function(event)
@@ -458,6 +481,8 @@ module.on_event = function(event)
   elseif event.split_type[1] == "core.autocommands" then
       if event.split_type[2] == "winclosed" then
         module.private.reset()
+      elseif event.split_type[2] == "cursormoved" then
+        module.private.goto_task()
       end
   end
 end
