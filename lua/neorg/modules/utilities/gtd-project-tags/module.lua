@@ -33,126 +33,17 @@ end
 module.public = {
   version = '0.1',
 
-  get_tag = function(tag_name, node, type, opts)
-    -- This function is largely copied from
-    -- core/gtd/queries/retrievers.lua
-    -- but adds "project" to the validation call
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-
-    vim.validate({
-      tag_name = {
-        tag_name,
-        function(t)
-          return vim.tbl_contains({ "time.due", "time.start", "contexts", "waiting.for", "project" }, t)
-        end,
-        "time.due|time.start|contexts|waiting.for|project",
-      },
-      node = { node, "table" },
-      type = {
-        type,
-        function(t)
-          return vim.tbl_contains({ "project", "task" }, t)
-        end,
-        "task|project",
-      },
-      opts = { opts, "table", true },
-    })
-
-    opts = opts or {}
-
-    -- Will fetch multiple parent tag sets if we did not explicitly add same_node.
-    -- Else, it'll only get the first upper tag_set from the current node
-    local fetch_multiple_sets = not opts.same_node
-
-    local tags_node = module.required["core.queries.native"].find_parent_node(
-      { node.node, node.bufnr },
-      "carryover_tag_set",
-      { multiple = fetch_multiple_sets }
-    )
-
-    if #tags_node == 0 then
-      return nil
-    end
-
-    local tree = {
-      {
-        query = { "all", "carryover_tag" },
-        where = { "child_content", "tag_name", tag_name },
-        subtree = {
-          {
-            query = { "all", "tag_parameters" },
-            subtree = {
-              { query = { "all", "word" } },
-            },
-          },
-        },
-      },
-    }
-
-    local extract = function(_node, extracted)
-      local tag_content_nodes = module.required["core.queries.native"].query_from_tree(_node[1], tree, _node[2])
-
-      if #tag_content_nodes == 0 then
-        return nil
-      end
-
-      if not opts.extract then
-        -- Only keep the nodes and add them to the results
-        tag_content_nodes = vim.tbl_map(function(node)
-            return node[1]
-        end, tag_content_nodes)
-        vim.list_extend(extracted, tag_content_nodes)
-      else
-        local res = module.required["core.queries.native"].extract_nodes(tag_content_nodes)
-
-        for _, res_tag in pairs(res) do
-          if not vim.tbl_contains(extracted, res_tag) then
-            table.insert(extracted, res_tag)
-          end
-        end
-      end
-    end
-
-    local extracted = {}
-
-    if not fetch_multiple_sets then
-      -- If i don't fetch multiple sets, i only have one, so i cannot iterate
-      extract(tags_node, extracted)
-    else
-      for _, _node in pairs(tags_node) do
-        extract(_node, extracted)
-      end
-    end
-
-    if #extracted == 0 then
-      return nil
-    end
-
-    return extracted
-  end,
-
   get_tasks = function()
-    -- This function is taken from
-    -- core/gtd/ui/selection_popups.lua:show_views_popup
-    -- with the following changes
-    -- 1. removes the get("projects") and display of projects.
-    -- 2. adds a call to get_tag to add the project to the metadata
-    -- 3. does not call displays
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-
     local configs = neorg.modules.get_module_config("core.gtd.base")
     local exclude_files = configs.exclude
     table.insert(exclude_files, configs.default_lists.inbox)
 
-    -- Get tasks and projects
     local tasks = module.required["core.gtd.queries"].get("tasks", { exclude_files = exclude_files })
-
     local tasks = module.required["core.gtd.queries"].add_metadata(tasks, "task")
+
     for _, task in pairs(tasks) do
-      task["project_node"] = module.public.get_tag("project", task, "task", {extract = true})
+      task["project_node"] = module.required["core.gtd.queries"].get_tag(
+        "project", task, "task", {extract = true}, {"project"})
     end
 
     return tasks
