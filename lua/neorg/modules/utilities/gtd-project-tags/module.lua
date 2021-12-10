@@ -10,6 +10,7 @@ module.setup = function()
     requires = {
       "core.autocommands",
       "core.gtd.ui",
+      "core.gtd.ui.displayers",
       "core.gtd.queries",
       "core.integrations.treesitter",
       "core.keybinds",
@@ -142,18 +143,6 @@ module.public = {
   get_project_level = function(project_name)
     return #vim.split(project_name, '/')
   end,
-
-  percent_completed = function(num_completed, num_tasks)
-    -- copied from 
-    -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
-    if num_tasks == 0 then
-      return 0
-    end
-    return math.floor(num_completed * 100 / num_tasks)
-  end,
 }
 
 module.config.public = {
@@ -246,9 +235,6 @@ module.private = {
   write_project = function(project_name, tasks, summary, buf_lines, line_to_task_data)
     -- adapted from 
     -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
     local num_indent = module.public.get_project_level(project_name)
     local whitespace = string.rep(" ", num_indent - 1)
 
@@ -257,13 +243,10 @@ module.private = {
       " (" .. summary.num_completed .. "/" .. summary.num_tasks .. " done)"
     table.insert(buf_lines, header)
 
-    local pct = module.public.percent_completed(summary.num_completed, summary.num_tasks)
-    local completed_over_10 = math.floor(pct / 10)
-    local percent_completed_visual = "["
-      .. string.rep("=", completed_over_10)
-      .. string.rep(" ", 10 - completed_over_10)
-      .. "]"
-    table.insert(buf_lines, whitespace .. "   " .. percent_completed_visual .. " " .. pct .. "% done")
+    local pct = module.required["core.gtd.ui.displayers"].percent(
+      summary.num_completed, summary.num_tasks)
+    local pct_str = module.required["core.gtd.ui.displayers"].percent_string(pct)
+    table.insert(buf_lines, whitespace .. "   " .. pct_str .. " " .. pct .. "% done")
     table.insert(buf_lines, "")
 
     for _, task in pairs(tasks) do
