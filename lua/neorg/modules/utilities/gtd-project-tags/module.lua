@@ -2,7 +2,6 @@ require("neorg.modules.base")
 require('neorg.events')
 
 local module = neorg.modules.create("utilities.gtd_project_tags")
-local log = require('neorg.external.log')
 
 module.setup = function()
   return {
@@ -153,18 +152,12 @@ module.private = {
   bufnr = nil,
 
   add_unknown_projects = function(projects, buf_lines, line_to_task_data, project_lines)
-    -- adapted from 
-    -- core/gtd/ui/displayers.lua:display_projects
-    --
-    -- todo: add merge request to neorg to refactor that function so there is
-    -- less to copy
     local unknown_project = projects["_"]
     if unknown_project and #unknown_project > 0 then
       local undone = vim.tbl_filter(function(a, _)
         return a.state ~= "done"
       end, unknown_project)
       table.insert(buf_lines, "- /" .. #undone .. " tasks don't have a project assigned/")
-
 
       if #undone > 0 then
         table.insert(buf_lines, "")
@@ -180,8 +173,6 @@ module.private = {
   end,
 
   add_known_projects = function(projects, completed_counts, buf_lines, line_to_task_data, project_lines)
-    -- adapted from 
-    -- core/gtd/ui/displayers.lua:display_projects
     local added_projects = {}
 
     local project_names = vim.tbl_keys(projects)
@@ -261,8 +252,10 @@ module.private = {
   end,
 
   reset = function()
-    module.required["core.mode"].set_mode(
-      module.required["core.mode"].get_previous_mode())
+    if module.required['core.mode'].get_mode() == 'gtd-displays' then
+      module.required["core.mode"].set_mode(
+        module.required["core.mode"].get_previous_mode())
+    end
 
     module.private.line_to_task_data = {}
     module.private.bufnr = {}
