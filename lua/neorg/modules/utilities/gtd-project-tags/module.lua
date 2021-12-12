@@ -17,6 +17,7 @@ module.setup = function()
       "core.mode",
       "core.queries.native",
       "core.ui",
+      "core.norg.completion",
     }
   }
 end
@@ -28,6 +29,22 @@ module.load = function()
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
   module.required["core.autocommands"].enable_autocommand("BufLeave")
+
+  -- add project tag to completions
+  for _, completion in pairs(module.required["core.norg.completion"].completions) do
+    if vim.tbl_contains(completion.complete, "contexts") then
+      table.insert(completion.complete, "project")
+
+      local completion_table = {
+        regex = "project%s+%w*",
+        complete = function(context, prev, saved) return vim.tbl_keys(module.public.group_tasks_by_project(module.public.get_tasks())) end,
+        options = {type = "GTDContext"},
+        descend = {},
+      }
+      table.insert(completion.descend, completion_table)
+    end
+    
+  end
 end
 
 module.public = {
