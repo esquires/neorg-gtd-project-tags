@@ -22,7 +22,7 @@ tasks in 3 different files (or 3 tasks in 3 sections in the same file) like this
 - [ ] send an email to foobar about discussing manufacturing experience
 ```
 
-Then you can enter `:Neorg gtd_project_tags` to get the following view of the `create_puzzle_app`
+Then you can enter `:Neorg gtd_project_tags 1 1` to get the following view of the `create_puzzle_app`
 project as follows:
 
 ```
@@ -101,33 +101,10 @@ require('neorg').setup {
 }
 ```
 
-If you also want to bind keys to 
+You can set a custom keybind using [signals](https://github.com/nvim-neorg/neorg/wiki/User-Keybinds)
+or just manually map it (e.g.):
 
 
-```
-local neorg_leader = "<Leader>o"
-require('neorg').setup {
-  load = {
-    ...
-    ["utilities.gtd-project-tags"] = {}
-
-    -- only needed if wanting to add custom keybinds
-    ["core.keybinds"] = {
-        config = {
-            default_keybinds = true,
-            neorg_leader = "<Leader>o"
-        }
-    },
-  },
-}
-
--- custom keybinding: https://github.com/nvim-neorg/neorg/wiki/User-Keybinds
-local neorg_callbacks = require('neorg.callbacks')
-neorg_callbacks.on_event("core.keybinds.events.enable_keybinds", function(_, keybinds)
-	keybinds.map_event_to_mode("norg", {
-      n = {
-        { neorg_leader .. "p", "utilities.gtd_project_tags.views" },
-      },
-    }, { silent = true, noremap = true })
-end)
+```lua
+nvim.api.nvim_command('nnoremap <Leader>p :Neorg gtd_project_tags 1 1')
 ```

@@ -25,9 +25,10 @@ end
 module.load = function()
   module.required["core.neorgcmd"].add_commands_from_table({
     definitions = { gtd_project_tags = {} },
-    data = { gtd_project_tags = { args = 0, name = "utilities.gtd_project_tags.views" } }
+    data = { gtd_project_tags = { args = 2, name = "utilities.gtd_project_tags.views" } }
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
+  module.required["core.keybinds"].register_keybind(module.name, "views_undone")
   module.required["core.autocommands"].enable_autocommand("BufLeave")
 
   -- add project tag to completions
@@ -117,7 +118,7 @@ module.public = {
     return subprojects
   end,
 
-  display_projects = function(projects)
+  display_projects = function(projects, show_completed)
     -- this function does a similar action to
     -- core/gtd/ui/displayers.lua:display_projects
     -- but uses the #project to generate project organization
@@ -130,9 +131,12 @@ module.public = {
     local line_to_task_data = {}
     local project_lines = {}
 
-    module.private.add_unknown_projects(projects, buf_lines, line_to_task_data, project_lines)
+    module.private.add_unknown_projects(
+      projects, buf_lines, line_to_task_data, project_lines)
     local completed_counts = module.private.get_completed_counts(projects)
-    module.private.add_known_projects(projects, completed_counts, buf_lines, line_to_task_data, project_lines)
+    module.private.add_known_projects(
+      projects, completed_counts, buf_lines, line_to_task_data,
+      project_lines, show_completed)
 
     module.public.generate_display(name, buf_lines, project_lines)
     module.public.add_folds(project_lines)
@@ -140,7 +144,7 @@ module.public = {
   end,
 
   generate_display = function(name, buf_lines, project_lines)
-    local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, false)
+    local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, { keybinds = false})
     module.private.bufnr = bufnr
     module.required["core.mode"].set_mode("gtd-displays")
 
@@ -171,6 +175,36 @@ module.public = {
   get_project_level = function(project_name)
     return #vim.split(project_name, '/')
   end,
+
+  remove_completed_tasks = function(tasks)
+    return vim.tbl_filter(function(task, _) return task.state ~= "done" end, tasks)
+  end,
+
+  remove_future_tasks = function(tasks)
+    -- if waiting for something, remove if done date is before today
+    -- otherwise remove if start date is before today
+    local after_today = module.required['core.gtd.queries'].starting_after_today
+
+    local filtered_tasks = {}
+
+    for _, task in pairs(tasks) do
+      local rm = false
+      if task['waiting.for'] ~= nil and task['time.due'] ~= nil then
+        rm = after_today(task['time.due'][1])
+      elseif task.start ~= nil then
+        rm = after_today(task['time.start'][1])
+      end
+
+      if not rm then
+        table.insert(filtered_tasks, task)
+      end
+    end
+    return filtered_tasks
+  end,
+
+  str2bool = function(string)
+    return string == "1" or string == "true"
+  end,
 }
 
 module.config.public = {
@@ -183,9 +217,7 @@ module.private = {
   add_unknown_projects = function(projects, buf_lines, line_to_task_data, project_lines)
     local unknown_project = projects["_"]
     if unknown_project and #unknown_project > 0 then
-      local undone = vim.tbl_filter(function(a, _)
-        return a.state ~= "done"
-      end, unknown_project)
+      local undone = module.public.remove_completed_tasks(unknown_project)
       table.insert(buf_lines, "- /" .. #undone .. " tasks don't have a project assigned/")
 
       if #undone > 0 then
@@ -201,7 +233,9 @@ module.private = {
     end
   end,
 
-  add_known_projects = function(projects, completed_counts, buf_lines, line_to_task_data, project_lines)
+  add_known_projects = function(
+      projects, completed_counts, buf_lines, line_to_task_data,
+      project_lines, show_completed)
     local added_projects = {}
 
     local project_names = vim.tbl_keys(projects)
@@ -217,8 +251,11 @@ module.private = {
         local summary = module.private.get_subproject_summary(subprojects, completed_counts)
 
         if summary.num_tasks - summary.num_completed > 0 then
-          project_lines[project_name] = {beg_line = #buf_lines + 3}
-          module.private.write_project(project_name, tasks, summary, buf_lines, line_to_task_data)
+          local offset = show_completed and 3 or 2
+          project_lines[project_name] = {beg_line = #buf_lines + offset}
+          module.private.write_project(
+            project_name, tasks, summary, show_completed,
+            buf_lines, line_to_task_data)
 
           project_lines[project_name].end_line = #buf_lines - 1
           for _, name in pairs(module.public.get_parent_project_names(project_name)) do
@@ -253,28 +290,39 @@ module.private = {
     return {num_completed = num_completed, num_tasks = num_tasks}
   end,
 
-  write_project = function(project_name, tasks, summary, buf_lines, line_to_task_data)
+  write_project = function(
+      project_name, tasks, summary, show_completed, buf_lines, line_to_task_data)
     -- adapted from 
     -- core/gtd/ui/displayers.lua:display_projects
     local num_indent = module.public.get_project_level(project_name)
     local whitespace = string.rep(" ", num_indent - 1)
 
-    local header =
-      whitespace .. string.rep("*", num_indent) .. " " .. project_name ..
-      " (" .. summary.num_completed .. "/" .. summary.num_tasks .. " done)"
+    local header = whitespace .. string.rep("*", num_indent) .. " " .. project_name
+
+    if show_completed then
+      header = header .. 
+        " (" .. summary.num_completed .. "/" .. summary.num_tasks .. " done)"
+    else
+      header = header .. " (" .. summary.num_tasks .. ")"
+    end
+
     table.insert(buf_lines, header)
 
     local pct = module.required["core.gtd.ui.displayers"].percent(
       summary.num_completed, summary.num_tasks)
-    local pct_str = module.required["core.gtd.ui.displayers"].percent_string(pct)
-    table.insert(buf_lines, whitespace .. "   " .. pct_str .. " " .. pct .. "% done")
+    if show_completed then
+      local pct_str = module.required["core.gtd.ui.displayers"].percent_string(pct)
+      table.insert(buf_lines, whitespace .. "   " .. pct_str .. " " .. pct .. "% done")
+    end
     table.insert(buf_lines, "")
 
-    for _, task in pairs(tasks) do
-      table.insert(buf_lines, whitespace .. "   - " .. task.content)
-      line_to_task_data[#buf_lines] = task
+    if #tasks > 0 then
+      for _, task in pairs(tasks) do
+        table.insert(buf_lines, whitespace .. "   - " .. task.content)
+        line_to_task_data[#buf_lines] = task
+      end
+      table.insert(buf_lines, '')
     end
-    table.insert(buf_lines, '')
   end,
 
   buffer_open = function()
@@ -330,15 +378,31 @@ module.events.subscribed = {
 
 module.on_event = function(event)
 
-  if vim.tbl_contains({"core.neorgcmd", "core.keybinds"}, event.split_type[1]) and
-      event.split_type[2] == "utilities.gtd_project_tags.views" then
+  display_helper = function(show_completed, show_future)
     local tasks = module.public.get_tasks()
+    if not show_completed then
+      tasks = module.public.remove_completed_tasks(tasks)
+    end
+
+    if not show_future then
+      tasks = module.public.remove_future_tasks(tasks)
+    end
+
     local projects = module.public.group_tasks_by_project(tasks)
-    module.public.display_projects(projects)
-  elseif event.split_type[1] == "core.keybinds" then
+    module.public.display_projects(projects, show_completed)
+  end
+
+
+  if event.split_type[1] == "core.keybinds" then
     if event.split_type[2] == "core.gtd.ui.goto_task" then
       module.private.goto_task()
+    elseif event.split_type[2] == "utilities.gtd_project_tags.views" then
+      display_helper(true, true)
     end
+  elseif event.split_type[1] == "core.neorgcmd" and
+      event.split_type[2] == "utilities.gtd_project_tags.views" then
+    local str2bool = module.public.str2bool
+    display_helper(str2bool(event.content[1]), str2bool(event.content[2]))
   elseif event.split_type[1] == "core.autocommands" then
       if event.split_type[2] == "bufleave" then
         module.private.reset()
