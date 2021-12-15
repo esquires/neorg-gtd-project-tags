@@ -67,15 +67,27 @@ module.public = {
   end,
 
   group_tasks_by_project = function(tasks)
-    projects = {}
+    local projects = {}
     for _, task in pairs(tasks) do
-      task.project_node =
-      module.required["core.gtd.queries"].insert(projects, (task.project_node or {'_'})[1], task)
+      task.project_node = module.required["core.gtd.queries"].insert(
+        projects, (task.project_node or {'_'})[1], task)
     end
+
+    -- add any parent project names that may be missing
+    local project_names = vim.tbl_keys(projects)
+    for project_name, _ in pairs(projects) do
+      local parent_project_names = module.public.get_parent_project_names(project_name)
+      for _, parent_project_name in pairs(parent_project_names) do
+        if not vim.tbl_contains(project_names, parent_project_name) then
+          projects[parent_project_name] = {}
+        end
+      end
+    end
+
     return projects
   end,
 
-  get_parent_projects = function(projects, project_name)
+  get_parent_project_names = function(project_name)
     local split_names = vim.split(project_name, '/')
     table.remove(split_names)
 
@@ -84,15 +96,15 @@ module.public = {
     end
 
     local name = split_names[1]
-    local parent_projects = {}
-    parent_projects[name] = projects[name]
+    local parent_project_names = {}
+    table.insert(parent_project_names, name)
 
     for i = 2, #split_names, 1 do
       name = name .. '/' .. split_names[i]
-      parent_projects[name] = projects[name]
+      table.insert(parent_project_names, name)
     end
 
-    return parent_projects
+    return parent_project_names
   end,
 
   get_subprojects = function(projects, project_name)
@@ -193,6 +205,7 @@ module.private = {
     local added_projects = {}
 
     local project_names = vim.tbl_keys(projects)
+
     table.sort(project_names)
 
     for _, project_name in pairs(project_names) do
@@ -208,7 +221,7 @@ module.private = {
           module.private.write_project(project_name, tasks, summary, buf_lines, line_to_task_data)
 
           project_lines[project_name].end_line = #buf_lines - 1
-          for name, _ in pairs(module.public.get_parent_projects(projects, project_name)) do
+          for _, name in pairs(module.public.get_parent_project_names(project_name)) do
             project_lines[name].end_line = #buf_lines - 1
           end
         end
