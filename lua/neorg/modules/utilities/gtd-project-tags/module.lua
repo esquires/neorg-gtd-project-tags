@@ -126,7 +126,7 @@ module.public = {
       projects = { projects, "table" },
     })
 
-    local name = "Projects"
+    local name = "ProjectsTags"
     local buf_lines = {"*" .. name .. "*", ""}
     local line_to_task_data = {}
     local project_lines = {}
@@ -144,14 +144,20 @@ module.public = {
   end,
 
   generate_display = function(name, buf_lines, project_lines)
-    local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, { keybinds = false})
+    if module.private.bufnr ~= nil then
+      vim.api.nvim_buf_delete(module.private.bufnr, {force = true})
+    end
+    local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, { del_on_autocommands = {} })
+    vim.cmd(('autocmd BufEnter <buffer=%s> lua put(require("neorg.modules.utilities.gtd-project-tags.module").public.set_gtd_display_mode())'):format(bufnr))
+    vim.cmd(('autocmd BufLeave <buffer=%s> lua require("neorg.modules.utilities.gtd-project-tags.module").public.reset_mode()'):format(bufnr))
+
     module.private.bufnr = bufnr
     module.required["core.mode"].set_mode("gtd-displays")
 
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, buf_lines)
 
     vim.api.nvim_buf_set_option(buf, "modifiable", false)
-    return buf
+
   end,
 
   add_folds = function(project_lines)
@@ -189,10 +195,18 @@ module.public = {
 
     for _, task in pairs(tasks) do
       local rm = false
-      if task['waiting.for'] ~= nil and task['time.due'] ~= nil then
-        rm = after_today(task['time.due'][1])
-      elseif task.start ~= nil then
-        rm = after_today(task['time.start'][1])
+      if task['waiting.for'] ~= nil then
+        -- someone else's task
+        rm = rm or (task['time.due'] ~= nil and after_today(task['time.due'][1]))
+      else
+        -- our own task
+        if task['time.start'] ~= nil and task['time.due'] ~= nil then
+          rm = rm or after_today(task['time.start'][1])
+        elseif task['time.due'] ~= nil then
+          rm = rm or after_today(task['time.due'][1])
+        elseif task['time.start'] ~= nil then
+          rm = rm or after_today(task['time.start'][1])
+        end
       end
 
       if not rm then
@@ -205,6 +219,18 @@ module.public = {
   str2bool = function(string)
     return string == "1" or string == "true"
   end,
+
+  set_gtd_display_mode = function()
+    module.required["core.mode"].set_mode("gtd-displays")
+  end,
+
+  reset_mode = function()
+    if module.required['core.mode'].get_mode() == 'gtd-displays' then
+      module.required["core.mode"].set_mode(
+        module.required["core.mode"].get_previous_mode())
+    end
+  end,
+
 }
 
 module.config.public = {
@@ -329,18 +355,9 @@ module.private = {
     return module.private.bufnr == vim.api.nvim_get_current_buf()
   end,
 
-  reset = function()
-    if module.required['core.mode'].get_mode() == 'gtd-displays' then
-      module.required["core.mode"].set_mode(
-        module.required["core.mode"].get_previous_mode())
-    end
-
+  reset_data = function()
     module.private.line_to_task_data = {}
-    module.private.bufnr = {}
-
-    if module.private.buffer_open() then
-      vim.cmd(":bd")
-    end
+    module.private.bufnr = nil
   end,
 
   goto_task = function()
@@ -355,10 +372,23 @@ module.private = {
       return
     end
 
-    module.private.reset()
-
     local ts_utils = module.required["core.integrations.treesitter"].get_ts_utils()
-    vim.api.nvim_win_set_buf(0, task.bufnr)
+    if vim.tbl_contains(vim.fn.tabpagebuflist(), task.bufnr) then
+      -- switch to that window
+      local winnr = vim.api.nvim_eval("bufwinnr(" .. task.bufnr .. ")")
+      vim.cmd("exe " .. winnr .. '" wincmd w"')
+    else
+      local window_numbers = vim.api.nvim_tabpage_list_wins(0)
+      if #window_numbers > 1 then
+        local curr_winnr = vim.api.nvim_get_current_win()
+        local new_winnr = window_numbers[1] == curr_winnr and window_numbers[2] or window_numbers[1]
+        vim.api.nvim_set_current_win(new_winnr)
+        vim.api.nvim_set_current_buf(task.bufnr)
+      end
+
+    end
+
+    module.public.reset_mode()
     ts_utils.goto_node(task.node)
 
   end,
@@ -392,7 +422,6 @@ module.on_event = function(event)
     module.public.display_projects(projects, show_completed)
   end
 
-
   if event.split_type[1] == "core.keybinds" then
     if event.split_type[2] == "core.gtd.ui.goto_task" then
       module.private.goto_task()
@@ -403,10 +432,6 @@ module.on_event = function(event)
       event.split_type[2] == "utilities.gtd_project_tags.views" then
     local str2bool = module.public.str2bool
     display_helper(str2bool(event.content[1]), str2bool(event.content[2]))
-  elseif event.split_type[1] == "core.autocommands" then
-      if event.split_type[2] == "bufleave" then
-        module.private.reset()
-      end
   end
 end
 
