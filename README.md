@@ -22,7 +22,7 @@ tasks in 3 different files (or 3 tasks in 3 sections in the same file) like this
 - [ ] send an email to foobar about discussing manufacturing experience
 ```
 
-Then you can enter `:Neorg gtd_project_tags 1 1` to get the following view of the `create_puzzle_app`
+Then you can enter `:Neorg gtd_project_tags 1 1 1` to get the following view of the `create_puzzle_app`
 project as follows:
 
 ```
@@ -79,10 +79,11 @@ which will render like this
     - develop a target market
 ```
 
-For large projects this project also supports folding by default. One pending
-feature is the ability to jump to tasks as users move through the tasks list.
-This is pending a [feature](https://github.com/nvim-neorg/neorg/issues/228)
-request to neorg. Once that is fixed, branch the `cursor-moved` will be merged.
+A couple differences from the default neorg GTD implementation:
+* Supports folding by default (useful for large projects with subprojects)
+* Does not require closing the view. In particular, when hitting <cr> on a task
+  it will jump to the task without closing the window so it is easy to jump between
+  tasks without re-running the view.
 
 # Installation
 
@@ -106,5 +107,19 @@ or just manually map it (e.g.):
 
 
 ```lua
-nvim.api.nvim_command('nnoremap <Leader>p :Neorg gtd_project_tags 1 1')
+nvim.api.nvim_command('nnoremap <Leader>p :Neorg gtd_project_tags 1 1 1')
 ```
+
+# Configuration
+
+The `Neorg gtd_project_tags` takes three arguments:
+
+* `show_completed`: whether to show completed tasks and projects. If false, 
+    task progress will not be shown to further reduce what needs to be reviewed.
+* `show_future`: if false, gtd-project-tags will only show tasks that are not
+  one of the following:
+  - has a waiting.for tag with a due date after today
+  - has a time.start after today
+  - has a time.due after today (if time.start is not after today)
+* `show_extra`: if true, the view will add a line for every task that has a
+  time.start, a time.due, or waiting.for tag defined.

@@ -25,7 +25,7 @@ end
 module.load = function()
   module.required["core.neorgcmd"].add_commands_from_table({
     definitions = { gtd_project_tags = {} },
-    data = { gtd_project_tags = { args = 2, name = "utilities.gtd_project_tags.views" } }
+    data = { gtd_project_tags = { args = 3, name = "utilities.gtd_project_tags.views" } }
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
   module.required["core.keybinds"].register_keybind(module.name, "views_undone")
@@ -118,7 +118,7 @@ module.public = {
     return subprojects
   end,
 
-  display_projects = function(projects, show_completed)
+  display_projects = function(projects, show_completed, write_extra)
     -- this function does a similar action to
     -- core/gtd/ui/displayers.lua:display_projects
     -- but uses the #project to generate project organization
@@ -132,10 +132,10 @@ module.public = {
     local project_lines = {}
 
     module.private.add_unknown_projects(
-      projects, buf_lines, line_to_task_data, project_lines)
+      projects, buf_lines, write_extra, line_to_task_data, project_lines)
     local completed_counts = module.private.get_completed_counts(projects)
     module.private.add_known_projects(
-      projects, completed_counts, buf_lines, line_to_task_data,
+      projects, completed_counts, write_extra, buf_lines, line_to_task_data,
       project_lines, show_completed)
 
     module.public.generate_display(name, buf_lines, project_lines)
@@ -240,7 +240,7 @@ module.private = {
   line_to_task_data = {},
   bufnr = nil,
 
-  add_unknown_projects = function(projects, buf_lines, line_to_task_data, project_lines)
+  add_unknown_projects = function(projects, buf_lines, write_extra, line_to_task_data, project_lines)
     local unknown_project = projects["_"]
     if unknown_project and #unknown_project > 0 then
       local undone = module.public.remove_completed_tasks(unknown_project)
@@ -250,8 +250,7 @@ module.private = {
         table.insert(buf_lines, "")
         project_lines['_'] = {beg_line = #buf_lines}
         for _, task in pairs(undone) do
-          table.insert(buf_lines, "-- " .. task.content)
-          line_to_task_data[#buf_lines] = task
+          module.private.write_task(task, '', write_extra, buf_lines, line_to_task_data)
         end
         project_lines['_'].end_line = #buf_lines
       end
@@ -260,7 +259,7 @@ module.private = {
   end,
 
   add_known_projects = function(
-      projects, completed_counts, buf_lines, line_to_task_data,
+      projects, completed_counts, write_extra, buf_lines, line_to_task_data,
       project_lines, show_completed)
     local added_projects = {}
 
@@ -280,7 +279,7 @@ module.private = {
           local offset = show_completed and 3 or 2
           project_lines[project_name] = {beg_line = #buf_lines + offset}
           module.private.write_project(
-            project_name, tasks, summary, show_completed,
+            project_name, tasks, summary, show_completed, write_extra,
             buf_lines, line_to_task_data)
 
           project_lines[project_name].end_line = #buf_lines - 1
@@ -317,7 +316,7 @@ module.private = {
   end,
 
   write_project = function(
-      project_name, tasks, summary, show_completed, buf_lines, line_to_task_data)
+      project_name, tasks, summary, show_completed, write_extra, buf_lines, line_to_task_data)
     -- adapted from 
     -- core/gtd/ui/displayers.lua:display_projects
     local num_indent = module.public.get_project_level(project_name)
@@ -344,8 +343,7 @@ module.private = {
 
     if #tasks > 0 then
       for _, task in pairs(tasks) do
-        table.insert(buf_lines, whitespace .. "   - " .. task.content)
-        line_to_task_data[#buf_lines] = task
+        module.private.write_task(task, whitespace, write_extra, buf_lines, line_to_task_data)
       end
       table.insert(buf_lines, '')
     end
@@ -358,6 +356,46 @@ module.private = {
   reset_data = function()
     module.private.line_to_task_data = {}
     module.private.bufnr = nil
+  end,
+
+  write_task = function(task, whitespace, write_extra, buf_lines, line_to_task_data)
+    table.insert(buf_lines, whitespace .. "   - " .. task.content)
+    line_to_task_data[#buf_lines] = task
+
+    if write_extra then
+        local extra_line = ''
+        local add_comma = function()
+          if #extra_line > 0 then
+            extra_line = extra_line .. ', '
+          end
+        end
+
+        local add_to_extra_line = function(key, abbr)
+          if task[key] ~= nil then
+            local diff = module.required['core.gtd.queries'].diff_with_today(task[key][1])
+            add_comma()
+            extra_line = extra_line .. abbr .. ': '
+            if diff.weeks ~= 0 then
+              extra_line = extra_line .. diff.weeks .. 'w' .. math.abs(diff.days) .. 'd'
+            else
+              extra_line = extra_line .. diff.days .. 'd'
+            end
+          end
+        end
+
+        add_to_extra_line('time.start', 'start')
+        add_to_extra_line('time.due', 'due')
+
+        if task['waiting.for'] ~= nil then
+          add_comma()
+          extra_line = extra_line .. 'waiting for: ' .. table.concat(task['waiting.for'], ', ')
+        end
+
+        if #extra_line > 0 then
+          table.insert(buf_lines, whitespace .. '     (' .. extra_line .. ')')
+          line_to_task_data[#buf_lines] = task
+        end
+    end
   end,
 
   goto_task = function()
@@ -408,7 +446,7 @@ module.events.subscribed = {
 
 module.on_event = function(event)
 
-  display_helper = function(show_completed, show_future)
+  display_helper = function(show_completed, show_future, write_extra)
     local tasks = module.public.get_tasks()
     if not show_completed then
       tasks = module.public.remove_completed_tasks(tasks)
@@ -419,19 +457,19 @@ module.on_event = function(event)
     end
 
     local projects = module.public.group_tasks_by_project(tasks)
-    module.public.display_projects(projects, show_completed)
+    module.public.display_projects(projects, show_completed, write_extra)
   end
 
   if event.split_type[1] == "core.keybinds" then
     if event.split_type[2] == "core.gtd.ui.goto_task" then
       module.private.goto_task()
     elseif event.split_type[2] == "utilities.gtd_project_tags.views" then
-      display_helper(true, true)
+      display_helper(true, true, true)
     end
   elseif event.split_type[1] == "core.neorgcmd" and
       event.split_type[2] == "utilities.gtd_project_tags.views" then
     local str2bool = module.public.str2bool
-    display_helper(str2bool(event.content[1]), str2bool(event.content[2]))
+    display_helper(str2bool(event.content[1]), str2bool(event.content[2]), str2bool(event.content[3]))
   end
 end
 
