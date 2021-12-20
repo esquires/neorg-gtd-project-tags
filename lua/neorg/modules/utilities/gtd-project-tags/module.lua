@@ -189,7 +189,9 @@ module.public = {
   remove_future_tasks = function(tasks)
     -- if waiting for something, remove if done date is before today
     -- otherwise remove if start date is before today
-    local after_today = module.required['core.gtd.queries'].starting_after_today
+    after_today = function(date)
+      return module.required['core.gtd.queries'].starting_after_today(date, true)
+    end
 
     local filtered_tasks = {}
 
