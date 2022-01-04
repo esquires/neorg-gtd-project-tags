@@ -55,8 +55,13 @@ module.public = {
     local configs = neorg.modules.get_module_config("core.gtd.base")
     local exclude_files = configs.exclude
     table.insert(exclude_files, configs.default_lists.inbox)
+    module.required["core.queries.native"].delete_content()
 
     local tasks = module.required["core.gtd.queries"].get("tasks", { exclude_files = exclude_files })
+    if tasks == nil then
+      return {}
+    end
+
     local tasks = module.required["core.gtd.queries"].add_metadata(tasks, "task")
 
     for _, task in pairs(tasks) do
@@ -154,9 +159,9 @@ module.public = {
     module.private.bufnr = bufnr
     module.required["core.mode"].set_mode("gtd-displays")
 
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, buf_lines)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, buf_lines)
 
-    vim.api.nvim_buf_set_option(buf, "modifiable", false)
+    vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
 
   end,
 
