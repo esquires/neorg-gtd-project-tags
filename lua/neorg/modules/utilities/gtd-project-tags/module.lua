@@ -205,15 +205,9 @@ module.public = {
       if task['waiting.for'] ~= nil then
         -- someone else's task
         rm = rm or (task['time.due'] ~= nil and after_today(task['time.due'][1]))
-      else
-        -- our own task
-        if task['time.start'] ~= nil and task['time.due'] ~= nil then
-          rm = rm or after_today(task['time.start'][1])
-        elseif task['time.due'] ~= nil then
-          rm = rm or after_today(task['time.due'][1])
-        elseif task['time.start'] ~= nil then
-          rm = rm or after_today(task['time.start'][1])
-        end
+      elseif task['time.start'] ~= nil then
+        -- our task that starts after today
+        rm = rm or after_today(task['time.start'][1])
       end
 
       if not rm then
