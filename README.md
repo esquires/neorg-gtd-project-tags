@@ -97,7 +97,7 @@ use {'esquires/gtd-project-tags'}
 require('neorg').setup {
   load = {
     ...
-    ["utilities.gtd-project-tags"] = {}
+    ["external.gtd-project-tags"] = {}
   },
 }
 ```

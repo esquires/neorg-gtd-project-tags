@@ -1,7 +1,7 @@
 require("neorg.modules.base")
 require('neorg.events')
 
-local module = neorg.modules.create("utilities.gtd_project_tags")
+local module = neorg.modules.create("external.gtd_project_tags")
 
 module.setup = function()
   return {
@@ -25,7 +25,7 @@ end
 module.load = function()
   module.required["core.neorgcmd"].add_commands_from_table({
     definitions = { gtd_project_tags = {} },
-    data = { gtd_project_tags = { args = 3, name = "utilities.gtd_project_tags.views" } }
+    data = { gtd_project_tags = { args = 3, name = "external.gtd_project_tags.views" } }
   })
   module.required["core.keybinds"].register_keybind(module.name, "views")
   module.required["core.keybinds"].register_keybind(module.name, "views_undone")
@@ -153,8 +153,8 @@ module.public = {
       vim.api.nvim_buf_delete(module.private.bufnr, {force = true})
     end
     local bufnr = module.required["core.ui"].create_norg_buffer(name, "vsplitr", nil, { del_on_autocommands = {} })
-    vim.cmd(('autocmd BufEnter <buffer=%s> lua put(require("neorg.modules.utilities.gtd-project-tags.module").public.set_gtd_display_mode())'):format(bufnr))
-    vim.cmd(('autocmd BufLeave <buffer=%s> lua require("neorg.modules.utilities.gtd-project-tags.module").public.reset_mode()'):format(bufnr))
+    vim.cmd(('autocmd BufEnter <buffer=%s> lua put(require("neorg.modules.external.gtd-project-tags.module").public.set_gtd_display_mode())'):format(bufnr))
+    vim.cmd(('autocmd BufLeave <buffer=%s> lua require("neorg.modules.external.gtd-project-tags.module").public.reset_mode()'):format(bufnr))
 
     module.private.bufnr = bufnr
     module.required["core.mode"].set_mode("gtd-displays")
@@ -437,10 +437,10 @@ module.events.defined = {
 }
 
 module.events.subscribed = {
-  ["core.neorgcmd"] = { ["utilities.gtd_project_tags.views"] = true},
+  ["core.neorgcmd"] = { ["external.gtd_project_tags.views"] = true},
   ["core.keybinds"] = {
     ["core.gtd.ui.goto_task"] = true,
-    ["utilities.gtd_project_tags.views"] = true,
+    ["external.gtd_project_tags.views"] = true,
   },
   ["core.autocommands"] = { bufleave = true, },
 }
@@ -464,11 +464,11 @@ module.on_event = function(event)
   if event.split_type[1] == "core.keybinds" then
     if event.split_type[2] == "core.gtd.ui.goto_task" then
       module.private.goto_task()
-    elseif event.split_type[2] == "utilities.gtd_project_tags.views" then
+    elseif event.split_type[2] == "external.gtd_project_tags.views" then
       display_helper(true, true, true)
     end
   elseif event.split_type[1] == "core.neorgcmd" and
-      event.split_type[2] == "utilities.gtd_project_tags.views" then
+      event.split_type[2] == "external.gtd_project_tags.views" then
     local str2bool = module.public.str2bool
     display_helper(str2bool(event.content[1]), str2bool(event.content[2]), str2bool(event.content[3]))
   end
