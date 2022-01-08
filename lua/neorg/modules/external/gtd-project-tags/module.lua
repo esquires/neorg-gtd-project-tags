@@ -412,9 +412,9 @@ module.private = {
     end
 
     local ts_utils = module.required["core.integrations.treesitter"].get_ts_utils()
-    if vim.tbl_contains(vim.fn.tabpagebuflist(), task.bufnr) then
+    if vim.tbl_contains(vim.fn.tabpagebuflist(), task.internal.bufnr) then
       -- switch to that window
-      local winnr = vim.api.nvim_eval("bufwinnr(" .. task.bufnr .. ")")
+      local winnr = vim.api.nvim_eval("bufwinnr(" .. task.internal.bufnr .. ")")
       vim.cmd("exe " .. winnr .. '" wincmd w"')
     else
       local window_numbers = vim.api.nvim_tabpage_list_wins(0)
@@ -422,13 +422,13 @@ module.private = {
         local curr_winnr = vim.api.nvim_get_current_win()
         local new_winnr = window_numbers[1] == curr_winnr and window_numbers[2] or window_numbers[1]
         vim.api.nvim_set_current_win(new_winnr)
-        vim.api.nvim_set_current_buf(task.bufnr)
+        vim.api.nvim_set_current_buf(task.internal.bufnr)
       end
 
     end
 
     module.public.reset_mode()
-    ts_utils.goto_node(task.node)
+    ts_utils.goto_node(task.internal.node)
 
   end,
 }
