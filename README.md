@@ -91,7 +91,7 @@ Installation follows typical conventions. Here is an example if using
 [packer](https://github.com/wbthomason/packer.nvim):
 ```lua
 -- packer installation
-use {'esquires/gtd-project-tags'}
+use {'esquires/neorg-gtd-project-tags'}
 
 -- neorg configuration
 require('neorg').setup {
