@@ -9,6 +9,7 @@ module.setup = function()
     requires = {
       "core.autocommands",
       "core.gtd.ui",
+      "core.gtd.base",
       "core.gtd.ui.displayers",
       "core.gtd.queries",
       "core.integrations.treesitter",
@@ -30,6 +31,11 @@ module.load = function()
   module.required["core.keybinds"].register_keybind(module.name, "views")
   module.required["core.keybinds"].register_keybind(module.name, "views_undone")
   module.required["core.autocommands"].enable_autocommand("BufLeave")
+
+  -- add tasks to gtd
+  module.required["core.gtd.base"].callbacks["get_data"] = function()
+      return module.public.get_tasks(), {}
+  end
 
   -- add project tag to completions
   for _, completion in pairs(module.required["core.norg.completion"].completions) do
