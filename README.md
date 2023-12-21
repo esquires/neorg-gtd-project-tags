@@ -1,3 +1,7 @@
+This code worked with an old version of neorg but given
+the gtd module was dropped, this code is obsolete.
+
+
 Provides a view of tasks grouped with a project tag.
 
 # Overview
